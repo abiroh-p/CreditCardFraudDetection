@@ -1,2 +1,0 @@
-# CreditCardFraudDetection
-Internship Project
