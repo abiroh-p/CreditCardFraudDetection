@@ -1,0 +1,44 @@
+# ── Data ──────────────────────────────────────────
+data:
+  raw_path: data/raw/creditcard.csv
+  processed_dir: data/processed
+  test_size: 0.2
+  random_seed: 42
+
+# ── Feature Engineering ───────────────────────────
+features:
+  amount_log: true
+  time_delta: true
+  velocity_windows: [60, 3600, 86400]   # seconds: 1min, 1hr, 24hr
+
+# ── Autoencoder ───────────────────────────────────
+autoencoder:
+  hidden_dims: [64, 32, 16, 32, 64]
+  activation: relu
+  dropout: 0.2
+  learning_rate: 0.001
+  batch_size: 256
+  epochs: 50
+  early_stopping_patience: 5
+
+# ── Isolation Forest ──────────────────────────────
+isolation_forest:
+  n_estimators: 100
+  contamination: 0.01
+  random_seed: 42
+
+# ── Ensemble ──────────────────────────────────────
+ensemble:
+  ae_weight: 0.6
+  if_weight: 0.4
+
+# ── Evaluation ────────────────────────────────────
+evaluation:
+  target_recall: 0.90           # find threshold at this recall
+  output_dir: outputs/reports
+
+# ── Paths ─────────────────────────────────────────
+paths:
+  saved_models: saved_models
+  plots: outputs/plots
+  reports: outputs/reports
