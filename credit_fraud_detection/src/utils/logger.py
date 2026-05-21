@@ -1,1 +1,30 @@
 # logger.py
+
+import logging
+import sys
+
+
+def get_logger(name: str, level: int = logging.INFO) -> logging.Logger:
+    """
+    Returns a logger that prints to stdout with a clean format.
+    Use as: logger = get_logger(__name__)
+    """
+    logger = logging.getLogger(name)
+
+    if logger.handlers:
+        return logger  # avoid duplicate handlers on re-import
+
+    logger.setLevel(level)
+
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setLevel(level)
+
+    formatter = logging.Formatter(
+        fmt="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    logger.propagate = False
+
+    return logger
