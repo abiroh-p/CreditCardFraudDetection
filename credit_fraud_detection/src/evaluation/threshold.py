@@ -1,4 +1,5 @@
 # threshold.py
+# threshold.py
 # src/evaluation/threshold.py
 
 import numpy as np
@@ -17,43 +18,35 @@ def find_optimal_threshold(
     scores: np.ndarray,
     target_recall: float = 0.90,
 ) -> float:
-    """
-    Find the lowest threshold that achieves at least target_recall.
-    Strategy: we tolerate more false positives to ensure we catch
-    most fraud — the cost of missing fraud >> cost of a false alarm.
-    """
     precision, recall, thresholds = precision_recall_curve(y_true, scores)
 
-    # precision_recall_curve has one more entry than thresholds
-    # zip stops at the shorter one (thresholds)
-    candidates = [
-        (thresh, rec, prec)
-        for thresh, rec, prec in zip(thresholds, recall[:-1], precision[:-1])
-        if rec >= target_recall
-    ]
+    f1_scores = 2 * precision[:-1] * recall[:-1] / (precision[:-1] + recall[:-1] + 1e-8)
 
-    if not candidates:
-        # fallback: just take the threshold with best F1
-        logger.warning(
-            f"No threshold achieves recall >= {target_recall:.0%}. "
-            "Falling back to best F1 threshold."
-        )
-        f1_scores = 2 * precision[:-1] * recall[:-1] / (precision[:-1] + recall[:-1] + 1e-8)
+    # compute FPR at each threshold
+    normal_total = (y_true == 0).sum()
+    fp_at_thresh = np.array([
+        ((scores >= t) & (y_true == 0)).sum()
+        for t in thresholds
+    ])
+    fpr_at_thresh = fp_at_thresh / normal_total
+
+    # maximize F1 subject to FPR <= 1%
+    fpr_mask = fpr_at_thresh <= 0.01
+    if fpr_mask.any():
+        masked_f1 = np.where(fpr_mask, f1_scores, 0)
+        best_idx  = np.argmax(masked_f1)
+    else:
         best_idx  = np.argmax(f1_scores)
-        threshold = float(thresholds[best_idx])
-        logger.info(f"Best F1 threshold: {threshold:.4f}")
-        return threshold
 
-    # among all thresholds meeting recall target, pick the one with best precision
-    best = max(candidates, key=lambda x: x[2])
-    threshold, rec, prec = best
-
+    threshold = float(thresholds[best_idx])
     logger.info(
         f"Optimal threshold: {threshold:.4f} — "
-        f"recall={rec:.4f}  precision={prec:.4f}"
+        f"recall={recall[best_idx]:.4f}  "
+        f"precision={precision[best_idx]:.4f}  "
+        f"f1={f1_scores[best_idx]:.4f}  "
+        f"fpr={fpr_at_thresh[best_idx]:.4f}"
     )
-    return float(threshold)
-
+    return threshold
 
 def plot_precision_recall_curve(
     y_true: np.ndarray,
@@ -81,7 +74,7 @@ def plot_precision_recall_curve(
     ax.axhline(baseline, color="gray", linestyle="--", linewidth=1,
                label=f"Random classifier (P={baseline:.3f})")
 
-    auprc = np.trapz(precision, recall) * -1   # recall decreases → negative area
+    auprc = np.trapezoid(precision, recall) * -1   # recall decreases → negative area
     ax.set_xlabel("Recall", fontsize=12)
     ax.set_ylabel("Precision", fontsize=12)
     ax.set_title(f"Precision-Recall Curve  |  AUPRC = {abs(auprc):.4f}", fontsize=13)

@@ -8,33 +8,30 @@ data:
 # ── Feature Engineering ───────────────────────────
 features:
   amount_log: true
-  time_delta: true
-  velocity_windows: [60, 3600, 86400]   # seconds: 1min, 1hr, 24hr
+  time_delta: true  # seconds: 1min, 1hr, 24hr
 
 # ── Autoencoder ───────────────────────────────────
 autoencoder:
-  hidden_dims: [64, 32, 16, 32, 64]
-  activation: relu
-  dropout: 0.2
-  learning_rate: 0.001
-  batch_size: 256
-  epochs: 50
-  early_stopping_patience: 5
+  hidden_dims: [128, 64, 32]
+  dropout: 0.1
+  learning_rate: 0.0005
+  batch_size: 512
+  epochs: 150
+  early_stopping_patience: 15
 
 # ── Isolation Forest ──────────────────────────────
 isolation_forest:
-  n_estimators: 100
-  contamination: 0.01
+  n_estimators: 200
+  contamination: 0.0017    # 492/284807 = actual fraud rate
   random_seed: 42
 
 # ── Ensemble ──────────────────────────────────────
 ensemble:
-  ae_weight: 0.6
-  if_weight: 0.4
+  ae_weight: 0.75
+  if_weight: 0.25
 
-# ── Evaluation ────────────────────────────────────
 evaluation:
-  target_recall: 0.90           # find threshold at this recall
+  target_recall: 0.75
   output_dir: outputs/reports
 
 # ── Paths ─────────────────────────────────────────

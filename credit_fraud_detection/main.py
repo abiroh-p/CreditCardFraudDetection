@@ -10,6 +10,7 @@ from src.models.isolation_forest import IForest
 from src.models.ensemble import AnomalyEnsemble
 from src.training.train_autoencoder import train_autoencoder, get_reconstruction_scores
 from src.training.train_iforest import train_iforest
+from src.data.preprocessor import FEATURE_COLS
 from src.evaluation.metrics import full_report, save_report
 from src.evaluation.threshold import (
     find_optimal_threshold,
@@ -39,6 +40,9 @@ def main():
     df           = load_raw_data(config)
     train_df, test_df = split_data(df, config)
 
+    logger.info(f"train_df shape : {train_df.shape}  fraud={train_df['Class'].sum()}")
+    logger.info(f"test_df  shape : {test_df.shape}   fraud={test_df['Class'].sum()}")
+
     # ── 2. Feature engineering ────────────────────────────────────
     logger.info("\n[2/7] Engineering features...")
     train_df = engineer_features(train_df, config)
@@ -54,7 +58,8 @@ def main():
 
     X_train, _      = get_X_y(train_df)
     X_test,  y_test = get_X_y(test_df)
-    feature_names   = [c for c in train_df.columns if c != "Class"]
+    feature_names = [c for c in FEATURE_COLS if c in train_df.columns]
+    logger.info(f"Features ({len(feature_names)}): {feature_names}")
 
     logger.info(f"X_train: {X_train.shape}  |  X_test: {X_test.shape}")
     logger.info(f"Fraud in test: {y_test.sum()} / {len(y_test)}")
@@ -78,7 +83,24 @@ def main():
     final_scores  = ensemble.combine(ae_scores, if_scores)
     ensemble.score_summary(ae_scores, if_scores, final_scores, y_test)
 
-    # ── 6. Threshold + evaluate ───────────────────────────────────
+    fraud_scores  = final_scores[y_test == 1]
+    normal_scores = final_scores[y_test == 0]
+
+    logger.info(f"Fraud  scores  — mean={fraud_scores.mean():.4f}  std={fraud_scores.std():.4f}  min={fraud_scores.min():.4f}  max={fraud_scores.max():.4f}")
+    logger.info(f"Normal scores  — mean={normal_scores.mean():.4f}  std={normal_scores.std():.4f}  min={normal_scores.min():.4f}  max={normal_scores.max():.4f}")
+    logger.info(f"Score overlap  — fraud below normal mean: {(fraud_scores < normal_scores.mean()).mean():.2%}")
+    logger.info(f"Feature names  ({len(feature_names)}): {feature_names}")
+    logger.info(f"X_train shape  : {X_train.shape}")
+    logger.info(f"X_test  shape  : {X_test.shape}")
+    logger.info(f"Fraud in test  : {y_test.sum()} / {len(y_test)} ({y_test.mean():.4%})")
+
+    # check if velocity features are all zero
+    vel_cols = [c for c in feature_names if "velocity" in c]
+    for col in vel_cols:
+        idx = feature_names.index(col)
+        logger.info(f"  {col} — mean={X_test[:, idx].mean():.4f}  std={X_test[:, idx].std():.4f}")
+
+    
     logger.info("\n[6/7] Tuning threshold and evaluating...")
     threshold = find_optimal_threshold(
         y_test, final_scores,

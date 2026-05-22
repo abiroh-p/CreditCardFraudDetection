@@ -9,30 +9,31 @@ logger = logging.getLogger(__name__)
 class AnomalyEnsemble:
     def __init__(self, config: dict):
         cfg = config["ensemble"]
-        self.ae_weight = cfg["ae_weight"]   # default 0.6
-        self.if_weight = cfg["if_weight"]   # default 0.4
+        self.ae_weight = cfg["ae_weight"]
+        self.if_weight = cfg["if_weight"]
         assert abs(self.ae_weight + self.if_weight - 1.0) < 1e-6, \
             "Ensemble weights must sum to 1.0"
 
-    def _normalize(self, scores: np.ndarray) -> np.ndarray:
-        """Min-max normalize to [0, 1] so both scores are on the same scale."""
-        mn, mx = scores.min(), scores.max()
-        return (scores - mn) / (mx - mn + 1e-8)
+    def _normalize_robust(self, scores: np.ndarray) -> np.ndarray:
+        """
+        Robust normalization using percentiles instead of min/max or rankdata.
+        Clips at p1 and p99 to remove outlier influence, then scales to [0,1].
+        This preserves score magnitude relationships unlike rankdata,
+        while being robust to extreme outliers unlike min-max.
+        """
+        p1  = np.percentile(scores, 1)
+        p99 = np.percentile(scores, 99)
+        clipped = np.clip(scores, p1, p99)
+        return (clipped - p1) / (p99 - p1 + 1e-8)
 
     def combine(
         self,
         ae_scores: np.ndarray,
         if_scores: np.ndarray,
     ) -> np.ndarray:
-        """
-        Weighted combination of normalized anomaly scores.
-        Both inputs must already be arrays of shape (N,).
-        Higher final score = more likely to be fraud.
-        """
-        ae_norm = self._normalize(ae_scores)
-        if_norm = self._normalize(if_scores)
-
-        final = self.ae_weight * ae_norm + self.if_weight * if_norm
+        ae_norm = self._normalize_robust(ae_scores)
+        if_norm = self._normalize_robust(if_scores)
+        final   = self.ae_weight * ae_norm + self.if_weight * if_norm
 
         logger.info(
             f"Ensemble scores — "
@@ -43,7 +44,6 @@ class AnomalyEnsemble:
         return final
 
     def predict(self, final_scores: np.ndarray, threshold: float) -> np.ndarray:
-        """Convert continuous scores to binary labels using a threshold."""
         return (final_scores >= threshold).astype(int)
 
     def score_summary(
@@ -53,10 +53,6 @@ class AnomalyEnsemble:
         final_scores: np.ndarray,
         y_true: np.ndarray,
     ) -> dict:
-        """
-        Log mean scores for fraud vs normal — sanity check.
-        Good ensemble: fraud should have clearly higher scores than normal.
-        """
         fraud_mask  = y_true == 1
         normal_mask = y_true == 0
 
@@ -73,5 +69,4 @@ class AnomalyEnsemble:
         for k, v in summary.items():
             logger.info(f"  {k:<22}: {v:.4f}")
         logger.info("───────────────────────────────────────")
-
-        return summary# ensemble.py
+        return summary

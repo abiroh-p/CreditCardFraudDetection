@@ -92,29 +92,25 @@ def explain_single_transaction(
     idx: int = 0,
     label: str = "fraud",
 ):
-    """
-    Waterfall plot for a single transaction.
-    Shows exactly which features pushed the anomaly score up or down.
-    Great for the 'explainability' section of your report.
-    """
+    # ensure 2D
+    if shap_values.ndim == 3:
+        shap_values = shap_values.mean(axis=0)
+    if shap_values.ndim == 1:
+        shap_values = shap_values.reshape(1, -1)
+
+    values = shap_values[idx].flatten()           # guaranteed 1D float array
+    top_n  = min(15, len(values))
+    order  = np.argsort(np.abs(values))[::-1][:top_n]   # top 15 by magnitude
+
+    top_values   = values[order].tolist()         # plain python list
+    top_features = [feature_names[i] for i in order.tolist()]
+    colors       = ["#E24B4A" if v > 0 else "#378ADD" for v in top_values]
+
     fig, ax = plt.subplots(figsize=(10, 6))
-
-    values   = shap_values[idx]
-    features = feature_names
-    order    = np.argsort(np.abs(values))[::-1][:15]   # top 15 features
-
-    colors = ["#E24B4A" if v > 0 else "#378ADD" for v in values[order]]
-    bars   = ax.barh(
-        [features[i] for i in order],
-        values[order],
-        color=colors,
-        edgecolor="none",
-    )
-
+    ax.barh(top_features[::-1], top_values[::-1], color=colors[::-1], edgecolor="none")
     ax.axvline(0, color="black", linewidth=0.8)
     ax.set_xlabel("SHAP value (impact on anomaly score)", fontsize=11)
     ax.set_title(f"Feature Contribution — {label} transaction #{idx}", fontsize=12)
-    ax.invert_yaxis()
     ax.grid(axis="x", alpha=0.3)
 
     out = Path(config["paths"]["plots"]) / f"shap_single_{label}_{idx}.png"
@@ -130,26 +126,23 @@ def _plot_shap_summary(
     config: dict,
     tag: str,
 ):
-    """
-    Beeswarm plot — each dot is one transaction, colored by feature value.
-    Shows both importance and direction of each feature's impact.
-    """
-    fig, ax = plt.subplots(figsize=(10, 7))
+    out = Path(config["paths"]["plots"]) / f"shap_summary_{tag}.png"
+    out.parent.mkdir(parents=True, exist_ok=True)
+
     shap.summary_plot(
         shap_values,
         X,
         feature_names=feature_names,
-        show=False,
-        plot_size=None,
-        ax=ax,
+        show=False,          # don't open a window
+        plot_size=(10, 7),   # shap controls the figure size itself
     )
-    ax.set_title(f"SHAP Summary — {tag}", fontsize=12)
-    out = Path(config["paths"]["plots"]) / f"shap_summary_{tag}.png"
-    fig.savefig(out, dpi=150, bbox_inches="tight")
-    plt.close(fig)
+
+    plt.title(f"SHAP Summary — {tag}", fontsize=12)
+    plt.savefig(out, dpi=150, bbox_inches="tight")
+    plt.close()
     logger.info(f"SHAP summary plot saved → {out}")
 
-
+    
 def _plot_shap_bar(
     shap_values: np.ndarray,
     feature_names: list,
@@ -157,20 +150,24 @@ def _plot_shap_bar(
     tag: str,
     top_n: int = 15,
 ):
-    """
-    Mean absolute SHAP values — clean bar chart of global feature importance.
-    Most readable for a presentation or report.
-    """
-    mean_abs = np.abs(shap_values).mean(axis=0)
-    order    = np.argsort(mean_abs)[::-1][:top_n]
+    # flatten any shape issues — ensure 2D (n_samples, n_features)
+    if shap_values.ndim == 3:
+        shap_values = shap_values.mean(axis=0)
+    if shap_values.ndim == 1:
+        shap_values = shap_values.reshape(1, -1)
+
+    mean_abs = np.abs(shap_values).mean(axis=0)   # shape: (n_features,)
+
+    # clip to available features
+    top_n   = min(top_n, len(mean_abs))
+    indices = np.argsort(mean_abs)                 # ascending
+    indices = indices[-top_n:]                     # take top_n from the end
+    # indices is now a clean 1D numpy array of ints — safe to iterate
+    labels  = [feature_names[i] for i in indices.tolist()]
+    values  = mean_abs[indices].tolist()
 
     fig, ax = plt.subplots(figsize=(9, 5))
-    ax.barh(
-        [feature_names[i] for i in reversed(order)],
-        mean_abs[reversed(order)],
-        color="#378ADD",
-        edgecolor="none",
-    )
+    ax.barh(labels, values, color="#378ADD", edgecolor="none")
     ax.set_xlabel("Mean |SHAP value|", fontsize=11)
     ax.set_title(f"Global Feature Importance — {tag} (top {top_n})", fontsize=12)
     ax.grid(axis="x", alpha=0.3)
@@ -178,4 +175,4 @@ def _plot_shap_bar(
     out = Path(config["paths"]["plots"]) / f"shap_importance_{tag}.png"
     fig.savefig(out, dpi=150, bbox_inches="tight")
     plt.close(fig)
-    logger.info(f"SHAP importance bar chart saved → {out}")# explainability.py
+    logger.info(f"SHAP importance bar chart saved → {out}")

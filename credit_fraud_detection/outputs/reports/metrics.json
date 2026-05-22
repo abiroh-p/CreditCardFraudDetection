@@ -1,0 +1,13 @@
+{
+  "auprc": 0.4934,
+  "auroc": 0.9553,
+  "f1": 0.6375,
+  "recall_at_95_precision": 0.0,
+  "false_positive_rate": 0.0045,
+  "true_positives": 350,
+  "false_positives": 256,
+  "true_negatives": 56607,
+  "false_negatives": 142,
+  "total_fraud": 492,
+  "total_normal": 56863
+}
