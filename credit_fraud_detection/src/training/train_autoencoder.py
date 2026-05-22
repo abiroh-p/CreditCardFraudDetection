@@ -32,7 +32,7 @@ def train_autoencoder(model: Autoencoder, X_train: np.ndarray, config: dict) -> 
 
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg["learning_rate"])
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode="min", patience=2, factor=0.5, verbose=True
+        optimizer, mode="min", patience=2, factor=0.5,
     )
     criterion = nn.MSELoss()
 
